@@ -14,9 +14,10 @@ Modern supply-chain attacks can hide malicious payloads inside source code using
 - **Recursive Source Code Scanning** — Scans entire directory trees (e.g. `C:\Users\...\repos`) focusing only on source code files (100+ extensions: `.cs`, `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.go`, `.rs`, `.html`, `.json`, `.yaml`, `.xml`, and more)
 - **Hidden Data Detection** — Identifies files containing Unicode variation selector characters that could encode hidden payloads
 - **Decoded Preview** — Shows what the hidden bytes decode to: readable UTF-8 text when printable, or hex dump (`0x AB CD ...`) for binary data
+- **Base64 Payload Detection** — Automatically detects when hidden bytes form a valid base64-encoded string and decodes the payload, revealing the actual hidden content (text or hex dump)
 - **Remove Hidden Data** — Three removal options:
-  - **Remove Selected** — Clean only the files you select in the results grid (supports multi-select with Ctrl+Click / Shift+Click)
-  - **Remove All** — Clean all detected files at once
+  - **Remove Selected** — Clean only the files you select in the results grid (supports multi-select with Ctrl+Click / Shift+Click). Only strips hidden characters from the file content — the files themselves are never deleted.
+  - **Remove All** — Clean all detected files at once. Only strips hidden characters — no files are deleted.
   - **Right-click Context Menu** — Both options available via right-click on the results grid
 - **Non-blocking UI** — All scanning and removal runs on background threads; the UI stays responsive with a progress bar and percentage updates
 - **Live Logs Panel** — Timestamped log output showing real-time scan progress, warnings for detected files, and removal confirmations

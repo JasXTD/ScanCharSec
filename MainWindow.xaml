@@ -99,6 +99,7 @@
                 <DataGridTextColumn Header="File Path" Binding="{Binding FilePath}" Width="*"/>
                 <DataGridTextColumn Header="Hidden Bytes" Binding="{Binding HiddenByteCount}" Width="100"/>
                 <DataGridTextColumn Header="Decoded Preview" Binding="{Binding DecodedPreview}" Width="250"/>
+                <DataGridTextColumn Header="Base64 Decoded" Binding="{Binding Base64DecodedPreview}" Width="250"/>
             </DataGrid.Columns>
         </DataGrid>
 

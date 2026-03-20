@@ -256,6 +256,8 @@ namespace ScanCharSecExploit
                     {
                         results.Add(result);
                         AppendLog($"⚠ Hidden data found: {file} ({result.HiddenByteCount} bytes)");
+                        if (result.Base64DecodedPreview != null)
+                            AppendLog($"   ↳ Base64 payload detected: {result.Base64DecodedPreview}");
                     }
                 }
                 catch (IOException) { }
@@ -300,7 +302,7 @@ namespace ScanCharSecExploit
         private async Task RemoveHiddenFromFiles(List<ScanResult> files, string description)
         {
             var result = MessageBox.Show(
-                $"This will remove hidden data from {description}. This cannot be undone.\n\nContinue?",
+                $"This will strip hidden characters from {description}.\n\nThe files themselves will NOT be deleted — only the invisible hidden characters will be removed from their content.\n\nThis cannot be undone. Continue?",
                 "Confirm Removal", MessageBoxButton.YesNo, MessageBoxImage.Warning);
             if (result != MessageBoxResult.Yes) return;
 

@@ -1,3 +1,4 @@
+using System;
 using System.IO;
 using System.Text;
 
@@ -69,11 +70,14 @@ namespace ScanCharSecExploit
             if (preview != null && preview.Length > 120)
                 preview = preview[..120] + "...";
 
+            string? base64Preview = TryDecodeBase64(allBytes);
+
             return new ScanResult
             {
                 FilePath = filePath,
                 HiddenByteCount = allBytes.Count,
-                DecodedPreview = preview ?? "(binary data)"
+                DecodedPreview = preview ?? "(binary data)",
+                Base64DecodedPreview = base64Preview
             };
         }
 
@@ -155,6 +159,50 @@ namespace ScanCharSecExploit
             }
             return printable > 0 && (double)printable / text.Length > 0.5;
         }
+
+        /// <summary>
+        /// Attempts to interpret the hidden bytes as a UTF-8 base64 string,
+        /// decodes it, and returns a preview of the decoded content.
+        /// Returns null if the bytes are not valid base64.
+        /// </summary>
+        private static string? TryDecodeBase64(List<byte> bytes)
+        {
+            try
+            {
+                var text = Encoding.UTF8.GetString(bytes.ToArray()).Trim();
+                if (text.Length < 4)
+                    return null;
+
+                // Check if the string looks like base64 (A-Z, a-z, 0-9, +, /, =)
+                foreach (char c in text)
+                {
+                    if (!char.IsLetterOrDigit(c) && c != '+' && c != '/' && c != '=' && !char.IsWhiteSpace(c))
+                        return null;
+                }
+
+                var decoded = Convert.FromBase64String(text);
+                if (decoded.Length == 0)
+                    return null;
+
+                var decodedText = Encoding.UTF8.GetString(decoded);
+                if (IsMostlyPrintable(decodedText))
+                {
+                    if (decodedText.Length > 120)
+                        decodedText = decodedText[..120] + "...";
+                    return decodedText;
+                }
+
+                // Return hex for binary base64 payloads
+                var hex = "0x " + BitConverter.ToString(decoded).Replace("-", " ");
+                if (hex.Length > 120)
+                    hex = hex[..120] + "...";
+                return hex;
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
     public class ScanResult
@@ -162,6 +210,7 @@ namespace ScanCharSecExploit
         public string FilePath { get; set; } = "";
         public int HiddenByteCount { get; set; }
         public string? DecodedPreview { get; set; }
+        public string? Base64DecodedPreview { get; set; }
     }
 
     public class ScanReport

@@ -1,6 +1,0 @@
-- [x] when we choose to remove empty space... is not actually remove the file itself it just remove the hidden char / hidden space so yea dont remove the file
-  - Done: Updated confirmation dialog to explicitly state files are NOT deleted, only hidden characters are stripped from content.
-- [x] add a detection on base64 hidden character
-  - Done: Scanner now checks if hidden bytes form a valid base64 string. If so, decodes the payload and shows it in a new "Base64 Decoded" column in the results grid and in the log output.
-- [x] update readme.md
-  - Done: Added base64 payload detection feature and clarified that remove only strips hidden chars (no file deletion).

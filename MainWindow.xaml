@@ -181,16 +181,6 @@
             <RowDefinition Height="200"/>
         </Grid.RowDefinitions>
 
-        <!-- Header -->
-        <StackPanel Grid.Row="0" Margin="0,0,0,16">
-            <TextBlock FontSize="22" FontWeight="Bold" Foreground="#CDD6F4">
-                <Run Text="🔍 "/>
-                <Run Text="ScanCharSec"/>
-            </TextBlock>
-            <TextBlock Text="Detect and remove hidden Unicode characters, Trojan Source attacks, and invisible payloads in source code."
-                       Foreground="#6C7086" FontSize="12" Margin="0,4,0,0"/>
-        </StackPanel>
-
         <!-- Path Selection -->
         <Grid Grid.Row="1" Margin="0,0,0,12">
             <Grid.ColumnDefinitions>

@@ -134,7 +134,17 @@ namespace ScanCharSecExploit
 
         private void SetScanning(bool scanning)
         {
-            ScanButton.IsEnabled = !scanning;
+            if (scanning)
+            {
+                ScanButton.Content = "⏹ Stop";
+                ScanButton.Style = (Style)FindResource("DangerButton");
+            }
+            else
+            {
+                ScanButton.Content = "▶ Scan";
+                ScanButton.Style = (Style)FindResource("ActionButton");
+            }
+            ScanButton.IsEnabled = true;
             UpdateRemoveButtons();
             ScanProgress.Visibility = scanning ? Visibility.Visible : Visibility.Collapsed;
             StatusText.Text = scanning ? "Scanning..." : "Ready";
@@ -196,6 +206,15 @@ namespace ScanCharSecExploit
 
         private async void ScanButton_Click(object sender, RoutedEventArgs e)
         {
+            // If already scanning, cancel
+            if (_cts != null && !_cts.IsCancellationRequested)
+            {
+                _cts.Cancel();
+                AppendLog("Stopping scan...");
+                ScanButton.IsEnabled = false;
+                return;
+            }
+
             var path = PathTextBox.Text.Trim();
             if (string.IsNullOrEmpty(path) || !Directory.Exists(path))
             {

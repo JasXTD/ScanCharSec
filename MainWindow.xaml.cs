@@ -12,6 +12,8 @@ namespace ScanCharSecExploit
     public partial class MainWindow : Window
     {
         private CancellationTokenSource? _cts;
+        private readonly FileLogger _fileLogger = new();
+        private int _logLineCount;
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
@@ -76,15 +78,44 @@ namespace ScanCharSecExploit
             InitializeComponent();
             ResultsGrid.SelectionChanged += ResultsGrid_SelectionChanged;
             AppendLog("Application started. Select a folder and click Scan.");
+            AppendLog($"Log file: {_fileLogger.LogFilePath}");
         }
 
         private void AppendLog(string message)
         {
+            _fileLogger.Log(message);
             Dispatcher.Invoke(() =>
             {
+                if (_logLineCount >= 600)
+                {
+                    LogTextBlock.Text = "";
+                    _logLineCount = 0;
+                    LogTextBlock.Text += $"[{DateTime.Now:HH:mm:ss}] ── Log cleared (600 line cap). Full log: {_fileLogger.LogFilePath} ──\n";
+                    _logLineCount++;
+                }
                 LogTextBlock.Text += $"[{DateTime.Now:HH:mm:ss}] {message}\n";
+                _logLineCount++;
                 LogScrollViewer.ScrollToEnd();
             });
+        }
+
+        protected override void OnClosed(EventArgs e)
+        {
+            _fileLogger.Dispose();
+            base.OnClosed(e);
+        }
+
+        private static bool IsFileWritable(string filePath)
+        {
+            try
+            {
+                var info = new FileInfo(filePath);
+                if (info.IsReadOnly) return false;
+                using var fs = info.Open(FileMode.Open, FileAccess.Write, FileShare.None);
+                return true;
+            }
+            catch (UnauthorizedAccessException) { return false; }
+            catch (IOException) { return false; }
         }
 
         private void FlashWindow()
@@ -322,6 +353,13 @@ namespace ScanCharSecExploit
                     {
                         try
                         {
+                            if (!IsFileWritable(item.FilePath))
+                            {
+                                AppendLog($"⛔ Skipped (access denied): {item.FilePath} — file is read-only or in a protected directory. Try running as Administrator.");
+                                rr.FilesProcessed++;
+                                continue;
+                            }
+
                             var text = File.ReadAllText(item.FilePath, Encoding.UTF8);
                             if (CharSecScanner.ContainsHiddenData(text))
                             {
@@ -332,6 +370,10 @@ namespace ScanCharSecExploit
                                 rr.BytesRemoved += hidden;
                                 AppendLog($"✅ Cleaned: {item.FilePath} ({hidden} hidden chars removed)");
                             }
+                        }
+                        catch (UnauthorizedAccessException)
+                        {
+                            AppendLog($"⛔ Access denied: {item.FilePath} — try running as Administrator.");
                         }
                         catch (Exception ex)
                         {

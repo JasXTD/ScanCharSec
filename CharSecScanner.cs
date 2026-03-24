@@ -297,8 +297,8 @@ namespace ScanCharSecExploit
 
 			for (int i = 0; i < text.Length; i++)
 			{
-				int cp = char.ConvertToUtf32(text, i);
-				bool isSurrogate = char.IsHighSurrogate(text[i]);
+				int cp = SafeConvertToUtf32(text, i, out bool isSurrogate);
+				if (cp < 0) continue; // skip unpaired surrogates
 
 				CharType ctype = ClassifyCodePoint(cp);
 
@@ -343,8 +343,8 @@ namespace ScanCharSecExploit
 			var sb = new StringBuilder(text.Length);
 			for (int i = 0; i < text.Length; i++)
 			{
-				int cp = char.ConvertToUtf32(text, i);
-				bool surr = char.IsHighSurrogate(text[i]);
+				int cp = SafeConvertToUtf32(text, i, out bool surr);
+				if (cp < 0) { sb.Append(text[i]); continue; } // keep unpaired surrogates as-is
 
 				if (ClassifyCodePoint(cp) == CharType.Normal)
 				{
@@ -361,8 +361,9 @@ namespace ScanCharSecExploit
 		{
 			for (int i = 0; i < text.Length; i++)
 			{
-				int cp = char.ConvertToUtf32(text, i);
-				if (char.IsHighSurrogate(text[i])) i++;
+				int cp = SafeConvertToUtf32(text, i, out bool surr);
+				if (surr) i++;
+				if (cp < 0) continue;
 				if (ClassifyCodePoint(cp) != CharType.Normal) return true;
 			}
 			return false;
@@ -374,8 +375,9 @@ namespace ScanCharSecExploit
 			int count = 0;
 			for (int i = 0; i < text.Length; i++)
 			{
-				int cp = char.ConvertToUtf32(text, i);
-				if (char.IsHighSurrogate(text[i])) i++;
+				int cp = SafeConvertToUtf32(text, i, out bool surr);
+				if (surr) i++;
+				if (cp < 0) continue;
 				if (ClassifyCodePoint(cp) != CharType.Normal) count++;
 			}
 			return count;
@@ -408,6 +410,33 @@ namespace ScanCharSecExploit
 		// ═════════════════════════════════════════════════════════════════════════
 		// Private helpers
 		// ═════════════════════════════════════════════════════════════════════════
+
+		/// <summary>
+		/// Safely converts the character at position i to a UTF-32 code-point.
+		/// Returns -1 for unpaired surrogates instead of throwing.
+		/// Sets isSurrogate to true when a valid high surrogate pair is consumed.
+		/// </summary>
+		private static int SafeConvertToUtf32(string text, int i, out bool isSurrogate)
+		{
+			char c = text[i];
+			if (char.IsHighSurrogate(c))
+			{
+				if (i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+				{
+					isSurrogate = true;
+					return char.ConvertToUtf32(c, text[i + 1]);
+				}
+				isSurrogate = false;
+				return -1; // lone high surrogate
+			}
+			if (char.IsLowSurrogate(c))
+			{
+				isSurrogate = false;
+				return -1; // lone low surrogate
+			}
+			isSurrogate = false;
+			return c;
+		}
 
 		/// <summary>Classifies a Unicode code-point.</summary>
 		private static CharType ClassifyCodePoint(int cp)
@@ -465,9 +494,8 @@ namespace ScanCharSecExploit
 			var sb = new StringBuilder();
 			for (int i = start; i < end; i++)
 			{
-				int cp = char.ConvertToUtf32(text, i);
-				bool surr = char.IsHighSurrogate(text[i]);
-				if (ClassifyCodePoint(cp) == CharType.Normal)
+				int cp = SafeConvertToUtf32(text, i, out bool surr);
+				if (cp >= 0 && ClassifyCodePoint(cp) == CharType.Normal)
 					sb.Append(text[i]);
 				if (surr) i++;
 			}

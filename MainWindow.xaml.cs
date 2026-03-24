@@ -276,7 +276,7 @@ namespace ScanCharSecExploit
                 }
             });
 
-            report.FilesWithHiddenData = results.ToList();
+            report.Results = results.ToList();
             return report;
         }
 
@@ -322,7 +322,7 @@ namespace ScanCharSecExploit
                             var text = File.ReadAllText(item.FilePath, Encoding.UTF8);
                             if (CharSecScanner.ContainsHiddenData(text))
                             {
-                                int hidden = CharSecScanner.CountHiddenBytes(text);
+                                int hidden = CharSecScanner.CountHiddenChars(text);
                                 string cleaned = CharSecScanner.StripHiddenData(text);
                                 File.WriteAllText(item.FilePath, cleaned, Encoding.UTF8);
                                 rr.FilesModified.Add(item.FilePath);

@@ -73,13 +73,22 @@ namespace ScanCharSecExploit
 		public string FilePath { get; set; } = "";
 
 		// ── Hidden-character findings ──────────────────────────────────────────
+		/// <summary>Number of decoded bytes extracted from variation selectors (payload size).</summary>
 		public int HiddenByteCount { get; set; }
 		public string DecodedPreview { get; set; } = "";
 		public string? Base64DecodedPreview { get; set; }
 		public List<HiddenCharOccurrence> Occurrences { get; set; } = new();
 
+		/// <summary>Total count of all hidden/invisible characters found.</summary>
+		public int HiddenCharCount => Occurrences.Count;
+
 		// ── Suspicious-pattern findings ───────────────────────────────────────
 		public List<PatternMatch> SuspiciousPatterns { get; set; } = new();
+
+		/// <summary>Compact summary of suspicious patterns found (e.g. "eval(Buffer.from(…)), VS-Decoder Loop").</summary>
+		public string SuspiciousPatternSummary =>
+			SuspiciousPatterns.Count == 0 ? "" :
+			string.Join(", ", SuspiciousPatterns.Select(p => p.PatternName));
 
 		// ── Computed severity ─────────────────────────────────────────────────
 		public Severity Severity
@@ -170,7 +179,7 @@ namespace ScanCharSecExploit
 		//  Each tuple: (regex, name, description, severity)
 		private static readonly (string Pattern, string Name, string Description, Severity Sev)[]
 				SuspiciousPatterns =
-		{
+				{
             // Variation-selector decoder loops
             (@"codePointAt\s*\(\s*0\s*\)[\s\S]{0,120}0xFE0",
 						 "VS-Decoder Loop",
@@ -224,23 +233,52 @@ namespace ScanCharSecExploit
 
 		/// <summary>
 		/// Fast byte-level pre-check. Returns true if the raw bytes could contain
-		/// variation selectors (EF B8 8x or F3 A0 84–87 xx). Use to skip files
-		/// that definitely contain no hidden data before full UTF-16 analysis.
+		/// hidden characters: variation selectors, bidi overrides, zero-width chars,
+		/// or invisible formatting. Use to skip files that definitely contain no
+		/// hidden data before full UTF-16 analysis.
 		/// </summary>
-		public static bool MayContainVS(byte[] data)
+		public static bool MayContainHiddenChars(byte[] data)
 		{
 			for (int i = 0; i < data.Length - 2; i++)
 			{
+				byte b = data[i];
+
 				// VS1–VS16: EF B8 80–8F
-				if (data[i] == 0xEF && data[i + 1] == 0xB8 &&
+				if (b == 0xEF && data[i + 1] == 0xB8 &&
 						data[i + 2] >= 0x80 && data[i + 2] <= 0x8F)
+					return true;
+
+				// BOM at non-leading position: EF BB BF
+				if (b == 0xEF && data[i + 1] == 0xBB && data[i + 2] == 0xBF && i > 0)
 					return true;
 
 				// VSS: F3 A0 84 80 – F3 A0 87 AF
 				if (i + 3 < data.Length &&
-						data[i] == 0xF3 && data[i + 1] == 0xA0 &&
+						b == 0xF3 && data[i + 1] == 0xA0 &&
 						data[i + 2] >= 0x84 && data[i + 2] <= 0x87)
 					return true;
+
+				// E2 prefix covers bidi overrides and zero-width chars
+				if (b == 0xE2)
+				{
+					byte b1 = data[i + 1];
+					byte b2 = data[i + 2];
+
+					// Zero-width: E2 80 8B–8D (U+200B–U+200D)
+					if (b1 == 0x80 && b2 >= 0x8B && b2 <= 0x8D) return true;
+
+					// Bidi overrides: E2 80 AA–AE (U+202A–U+202E)
+					if (b1 == 0x80 && b2 >= 0xAA && b2 <= 0xAE) return true;
+
+					// Word Joiner: E2 81 A0 (U+2060)
+					if (b1 == 0x81 && b2 == 0xA0) return true;
+
+					// Bidi isolates: E2 81 A6–A9 (U+2066–U+2069)
+					if (b1 == 0x81 && b2 >= 0xA6 && b2 <= 0xA9) return true;
+				}
+
+				// Soft Hyphen: C2 AD (U+00AD)
+				if (b == 0xC2 && data[i + 1] == 0xAD) return true;
 			}
 			return false;
 		}

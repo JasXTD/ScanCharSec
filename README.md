@@ -1,37 +1,55 @@
 # ScanCharSecExploit
 
-A WPF desktop application that detects and removes **hidden Unicode characters** embedded in source code files. These invisible variation selector characters (U+FE00–U+FE0F, U+E0100–U+E01EF) can be used to smuggle arbitrary data — including executable code — into seemingly normal text files.
+A WPF desktop application that detects and removes **hidden Unicode characters** embedded in source code files. These invisible characters — including variation selectors, bidi overrides (Trojan Source), zero-width chars, and invisible formatting — can be used to smuggle arbitrary data or manipulate code display in editors and code review tools.
 
 ## What It Does
 
-Modern supply-chain attacks can hide malicious payloads inside source code using Unicode variation selectors. These characters are completely invisible in editors, terminals, and code review tools, but can encode arbitrary binary data byte-by-byte. This tool scans your codebase to find and remove them.
+Modern supply-chain attacks can hide malicious payloads inside source code using Unicode variation selectors (U+FE00–U+FE0F, U+E0100–U+E01EF). These characters are completely invisible in editors, terminals, and code review tools, but can encode arbitrary binary data byte-by-byte. Additionally, Trojan Source attacks (CVE-2021-42574) use bidi override characters to make code appear different from what it actually does. This tool scans your codebase to find and remove all of these threats.
 
 ## Screenshots
 <img width="1920" height="1046" alt="image" src="https://github.com/user-attachments/assets/cc5ba04d-f39a-4dbf-8c47-229b6a724d8a" />
 
 ## Features
 
-- **Recursive Source Code Scanning** — Scans entire directory trees (e.g. `C:\Users\...\repos`) focusing only on source code files (100+ extensions: `.cs`, `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.go`, `.rs`, `.html`, `.json`, `.yaml`, `.xml`, and more)
-- **Hidden Data Detection** — Identifies files containing Unicode variation selector characters that could encode hidden payloads
-- **Decoded Preview** — Shows what the hidden bytes decode to: readable UTF-8 text when printable, or hex dump (`0x AB CD ...`) for binary data
-- **Base64 Payload Detection** — Automatically detects when hidden bytes form a valid base64-encoded string and decodes the payload, revealing the actual hidden content (text or hex dump)
-- **Remove Hidden Data** — Three removal options:
-  - **Remove Selected** — Clean only the files you select in the results grid (supports multi-select with Ctrl+Click / Shift+Click). Only strips hidden characters from the file content — the files themselves are never deleted.
-  - **Remove All** — Clean all detected files at once. Only strips hidden characters — no files are deleted.
-  - **Right-click Context Menu** — Both options available via right-click on the results grid
-- **Non-blocking UI** — All scanning and removal runs on background threads; the UI stays responsive with a progress bar and percentage updates
-- **Live Logs Panel** — Timestamped log output showing real-time scan progress, warnings for detected files, and removal confirmations
-- **Taskbar Flash** — The window flashes in the taskbar when a scan completes, so you can work on other things while it runs
+### Detection
+- **Variation Selector Detection** — Identifies VS1–VS16 (U+FE00–U+FE0F) and supplemental VS (U+E0100–U+E01EF) characters used to encode hidden byte payloads
+- **Trojan Source Detection (CVE-2021-42574)** — Detects bidi override characters (LRE, RLE, LRO, RLO, LRI, RLI, FSI, PDI) that can make code appear different from its actual logic
+- **Zero-Width Character Detection** — Finds zero-width spaces (ZWSP), joiners (ZWJ, ZWNJ), word joiners, and stray BOMs
+- **Invisible Formatting Detection** — Catches soft hyphens, combining grapheme joiners, Hangul fillers, and other invisible formatting characters
+- **Suspicious Pattern Detection** — Regex-based detection of dangerous code patterns like `eval(Buffer.from(...))`, variation-selector decoder loops, and `new Function(...)` abuse in JS/TS files
+
+### Analysis
+- **Severity Classification** — Each finding is classified as Critical (bidi overrides, eval+decode combos), Warning (variation selectors, suspicious patterns), or Info (zero-width, invisible formatting)
+- **Decoded Preview** — Shows what hidden VS bytes decode to: readable UTF-8 text when printable, or hex dump for binary data
+- **Base64 Payload Detection** — Automatically detects when hidden bytes form valid base64 and decodes the inner payload
+- **Suspicious Pattern Summary** — Names and describes each suspicious code pattern found
+
+### Remediation
+- **Remove Selected** — Clean only the files you select in the results grid (supports multi-select with Ctrl+Click / Shift+Click). Only strips hidden characters from file content — files are never deleted
+- **Remove All** — Clean all detected files at once. Only strips hidden characters — no files are deleted
+- **Right-click Context Menu** — Copy decoded preview, copy file path, or trigger removal from the context menu
+
+### UI
+- **Severity-Colored Rows** — Results are color-coded by severity: red for Critical, orange for Warning, blue for Info
+- **Resizable Log Panel** — Drag the splitter to resize the log panel
+- **Non-blocking UI** — All scanning and removal runs on background threads with a progress bar and percentage updates
+- **Live Logs** — Timestamped log output showing scan progress, per-file findings with severity, decoded payloads, and suspicious patterns
+- **Taskbar Flash** — The window flashes in the taskbar when a scan completes
+
+### Scanning
+- **Fast Byte-Level Pre-Check** — Quickly skips files with no hidden characters before expensive full analysis using byte pattern matching for VS, bidi, zero-width, and invisible formatting sequences
+- **Recursive Source Code Scanning** — Scans entire directory trees focusing on source code files (100+ extensions: `.cs`, `.py`, `.js`, `.ts`, `.java`, `.cpp`, `.go`, `.rs`, `.html`, `.json`, `.yaml`, `.xml`, and more)
+- **Parallel Processing** — Uses all CPU cores for scanning large codebases
 
 ## How It Works
 
-Unicode variation selectors (VS1–VS16: U+FE00–U+FE0F, VS17–VS256: U+E0100–U+E01EF) are zero-width characters normally used to select glyph variants. However, since there are 256 of them, each one can represent a byte value (0–255), allowing any arbitrary data to be encoded invisibly after a normal carrier character.
+The scanner operates in two passes per file:
 
-This tool scans each source file for these variation selectors. When found, it:
-1. Reports the file path and count of hidden bytes
-2. Attempts to decode the hidden bytes as UTF-8 text for a preview
-3. Falls back to a hex dump if the data isn't printable text
-4. Optionally strips all variation selectors from the file to clean it
+1. **Hidden Character Detection** — Iterates every Unicode code-point in the file, classifying each as a variation selector, bidi override, zero-width character, invisible formatting, or normal. Variation selectors are decoded back to their hidden byte values (0–255) and reassembled into a payload preview.
+
+2. **Suspicious Pattern Detection** — Runs regex-based pattern matching to find dangerous code constructs (e.g., `eval(Buffer.from(...))`, VS-decoder loops, `new Function(...)`) commonly used in hidden-payload attacks.
+
+Before either pass, a fast byte-level pre-check (`MayContainHiddenChars`) scans the raw file bytes for known UTF-8 sequences of hidden characters to skip clean files without the overhead of full UTF-16 decoding.
 
 ## Requirements
 

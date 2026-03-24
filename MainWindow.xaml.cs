@@ -241,23 +241,26 @@ namespace ScanCharSecExploit
             {
                 try
                 {
-                    // Fast byte-level pre-check to skip files without VS sequences
+                    // Fast byte-level pre-check to skip clean files
                     var rawBytes = File.ReadAllBytes(file);
-                    if (!CharSecScanner.MayContainVS(rawBytes))
+                    if (!CharSecScanner.MayContainHiddenChars(rawBytes))
                     {
                         Interlocked.Increment(ref processed);
                         return;
                     }
 
                     var text = Encoding.UTF8.GetString(rawBytes);
-                    // Single-pass: detect, count, and preview in one scan
                     var result = CharSecScanner.Analyze(text, file);
-                    if (result != null)
+                    if (result.HasFindings)
                     {
                         results.Add(result);
-                        AppendLog($"⚠ Hidden data found: {file} ({result.HiddenByteCount} bytes)");
+                        AppendLog($"⚠ Hidden data found: {file} ({result.HiddenCharCount} hidden chars, severity: {result.Severity})");
+                        if (result.HiddenByteCount > 0)
+                            AppendLog($"   ↳ VS payload: {result.HiddenByteCount} decoded bytes");
                         if (result.Base64DecodedPreview != null)
                             AppendLog($"   ↳ Base64 payload detected: {result.Base64DecodedPreview}");
+                        if (result.SuspiciousPatterns.Count > 0)
+                            AppendLog($"   ↳ Suspicious patterns: {result.SuspiciousPatternSummary}");
                     }
                 }
                 catch (IOException) { }
@@ -327,7 +330,7 @@ namespace ScanCharSecExploit
                                 File.WriteAllText(item.FilePath, cleaned, Encoding.UTF8);
                                 rr.FilesModified.Add(item.FilePath);
                                 rr.BytesRemoved += hidden;
-                                AppendLog($"✅ Cleaned: {item.FilePath} ({hidden} bytes removed)");
+                                AppendLog($"✅ Cleaned: {item.FilePath} ({hidden} hidden chars removed)");
                             }
                         }
                         catch (Exception ex)
@@ -349,8 +352,8 @@ namespace ScanCharSecExploit
                     ResultsGrid.ItemsSource = allItems;
                 }
 
-                StatusText.Text = $"Removed {removeReport.BytesRemoved} hidden bytes from {removeReport.FilesModified.Count} file(s)";
-                AppendLog($"Removal complete. {removeReport.FilesModified.Count} files modified, {removeReport.BytesRemoved} bytes removed.");
+                StatusText.Text = $"Removed {removeReport.BytesRemoved} hidden chars from {removeReport.FilesModified.Count} file(s)";
+                AppendLog($"Removal complete. {removeReport.FilesModified.Count} files modified, {removeReport.BytesRemoved} hidden chars removed.");
                 UpdateRemoveButtons();
             }
             catch (Exception ex)

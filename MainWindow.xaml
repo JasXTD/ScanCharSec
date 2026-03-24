@@ -257,14 +257,14 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Hidden Chars" Binding="{Binding HiddenByteCount}" Width="90">
+                    <DataGridTextColumn Header="Hidden Chars" Binding="{Binding HiddenCharCount}" Width="90">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextAlignment" Value="Center"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Decoded Preview" Binding="{Binding DecodedPreview}" Width="220">
+                    <DataGridTextColumn Header="Decoded Preview" Binding="{Binding DecodedPreview}" Width="200">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
@@ -272,11 +272,19 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Base64 Decoded" Binding="{Binding Base64DecodedPreview}" Width="220">
+                    <DataGridTextColumn Header="Base64 Decoded" Binding="{Binding Base64DecodedPreview}" Width="180">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
                                 <Setter Property="ToolTip" Value="{Binding Base64DecodedPreview}"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Suspicious Patterns" Binding="{Binding SuspiciousPatternSummary}" Width="180">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                <Setter Property="ToolTip" Value="{Binding SuspiciousPatternSummary}"/>
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>

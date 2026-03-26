@@ -153,9 +153,10 @@ namespace ScanCharSecExploit
         private void UpdateRemoveButtons()
         {
             var items = ResultsGrid.ItemsSource as List<ScanResult>;
-            bool hasResults = items != null && items.Count > 0;
-            RemoveAllButton.IsEnabled = hasResults;
-            RemoveSelectedButton.IsEnabled = ResultsGrid.SelectedItems.Count > 0;
+            bool hasRemovableResults = items != null && items.Any(i => i.HasRemovableHiddenChars);
+            bool hasSelectedRemovableResults = ResultsGrid.SelectedItems.Cast<ScanResult>().Any(i => i.HasRemovableHiddenChars);
+            RemoveAllButton.IsEnabled = hasRemovableResults;
+            RemoveSelectedButton.IsEnabled = hasSelectedRemovableResults;
         }
 
         private void ResultsGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -232,10 +233,10 @@ namespace ScanCharSecExploit
             {
                 var report = await Task.Run(() => ScanDirectory(path, _cts.Token), _cts.Token);
 
-                ResultsGrid.ItemsSource = report.FilesWithHiddenData;
+                ResultsGrid.ItemsSource = report.FilesWithFindings;
                 UpdateRemoveButtons();
-                StatusText.Text = $"Done — {report.FilesScanned} source files scanned, {report.FilesWithHiddenData.Count} with hidden data";
-                AppendLog($"Scan complete. {report.FilesScanned} source files scanned, {report.FilesWithHiddenData.Count} files with hidden data.");
+                StatusText.Text = $"Done — {report.FilesScanned} source files scanned, {report.FilesWithFindings.Count} with findings";
+                AppendLog($"Scan complete. {report.FilesScanned} source files scanned, {report.FilesWithFindings.Count} files with findings.");
                 FlashWindow();
             }
             catch (OperationCanceledException)
@@ -293,18 +294,20 @@ namespace ScanCharSecExploit
                 {
                     // Fast byte-level pre-check to skip clean files
                     var rawBytes = File.ReadAllBytes(file);
-                    if (!CharSecScanner.MayContainHiddenChars(rawBytes))
+                    bool mayContainHidden = CharSecScanner.MayContainHiddenChars(rawBytes);
+                    bool mayContainSuspiciousText = CharSecScanner.MayContainSuspiciousText(rawBytes);
+                    if (!mayContainHidden && !mayContainSuspiciousText)
                     {
                         Interlocked.Increment(ref processed);
                         return;
                     }
 
                     var text = Encoding.UTF8.GetString(rawBytes);
-                    var result = CharSecScanner.Analyze(text, file);
+                    var result = CharSecScanner.Analyze(text, file, includeHiddenCharPass: mayContainHidden);
                     if (result.HasFindings)
                     {
                         results.Add(result);
-                        AppendLog($"⚠ Hidden data found: {file} ({result.HiddenCharCount} hidden chars, severity: {result.Severity})");
+                        AppendLog($"⚠ Findings detected: {file} ({result.HiddenCharCount} hidden chars, severity: {result.Severity})");
                         if (result.HiddenByteCount > 0)
                             AppendLog($"   ↳ VS payload: {result.HiddenByteCount} decoded bytes");
                         if (result.Base64DecodedPreview != null)
@@ -333,12 +336,12 @@ namespace ScanCharSecExploit
             return report;
         }
 
-        private async void RemoveSelected_Click(object sender, RoutedEventArgs e)
+    private async void RemoveSelected_Click(object sender, RoutedEventArgs e)
         {
-            var selected = ResultsGrid.SelectedItems.Cast<ScanResult>().ToList();
+            var selected = ResultsGrid.SelectedItems.Cast<ScanResult>().Where(i => i.HasRemovableHiddenChars).ToList();
             if (selected.Count == 0)
             {
-                MessageBox.Show("No files selected.", "Nothing Selected",
+                MessageBox.Show("The current selection has no hidden Unicode characters to strip. Pattern-only/IOC findings are informational and are not auto-remediated.", "Nothing Removable",
                     MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
@@ -348,8 +351,15 @@ namespace ScanCharSecExploit
         private async void RemoveAll_Click(object sender, RoutedEventArgs e)
         {
             var items = ResultsGrid.ItemsSource as List<ScanResult>;
-            if (items == null || items.Count == 0) return;
-            await RemoveHiddenFromFiles(items, $"all {items.Count} file(s)");
+            var removableItems = items?.Where(i => i.HasRemovableHiddenChars).ToList();
+            if (removableItems == null || removableItems.Count == 0)
+            {
+                MessageBox.Show("There are no hidden Unicode findings to remove. Pattern-only/IOC findings need manual review.", "Nothing Removable",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            await RemoveHiddenFromFiles(removableItems, $"all {removableItems.Count} file(s)");
         }
 
         private async Task RemoveHiddenFromFiles(List<ScanResult> files, string description)

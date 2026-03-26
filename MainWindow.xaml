@@ -270,7 +270,7 @@
                             </Style>
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
-                    <DataGridTextColumn Header="Suspicious Patterns" Binding="{Binding SuspiciousPatternSummary}" Width="180">
+                    <DataGridTextColumn Header="Threat Signals" Binding="{Binding SuspiciousPatternSummary}" Width="180">
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="TextTrimming" Value="CharacterEllipsis"/>

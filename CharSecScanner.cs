@@ -81,6 +81,7 @@ namespace ScanCharSecExploit
 
 		/// <summary>Total count of all hidden/invisible characters found.</summary>
 		public int HiddenCharCount => Occurrences.Count;
+		public bool HasRemovableHiddenChars => HiddenCharCount > 0;
 
 		// ── Suspicious-pattern findings ───────────────────────────────────────
 		public List<PatternMatch> SuspiciousPatterns { get; set; } = new();
@@ -117,8 +118,9 @@ namespace ScanCharSecExploit
 	{
 		public int FilesScanned { get; set; }
 		public List<ScanResult> Results { get; set; } = new();
-		public List<ScanResult> FilesWithHiddenData => Results.Where(r => r.HasFindings).ToList();
-		public bool Found => FilesWithHiddenData.Count > 0;
+		public List<ScanResult> FilesWithFindings => Results.Where(r => r.HasFindings).ToList();
+		public List<ScanResult> FilesWithHiddenData => FilesWithFindings;
+		public bool Found => FilesWithFindings.Count > 0;
 	}
 
 	public class RemoveReport
@@ -221,11 +223,57 @@ namespace ScanCharSecExploit
 						 Severity.Warning),
 
             // Suspicious require/import inside eval
-            (@"eval\s*\([\s\S]{0,200}require\s*\(",
+						(@"eval\s*\([\s\S]{0,200}require\s*\(",
 						 "eval(require(…))",
 						 "eval containing a require() call – possible code-injection vector",
 						 Severity.Warning),
+
+						(@"\blzcdrtfxyqiplpd\b",
+						 "GlassWorm Marker Variable",
+						 "Matches a published GlassWorm marker variable seen in infected code.",
+						 Severity.Critical),
+
+						(@"\b(?:BjVeAjPrSKFiingBn4vZvghsGj9KCE8AJVtbc9S8o8SC|6YGcuyFRJKZtcaYCCFba9fScNUvPkGXodXE1mJiSzqDJ)\b",
+						 "GlassWorm Solana IOC",
+						 "Matches a published GlassWorm Solana wallet indicator of compromise.",
+						 Severity.Critical),
+
+						(@"(?:~[/\\]init\.json|homedir\s*\(\)[\s\S]{0,120}init\.json|process\.env\.(?:HOME|USERPROFILE)[\s\S]{0,120}init\.json|GetFolderPath\s*\([\s\S]{0,120}UserProfile[\s\S]{0,120}init\.json|SpecialFolder\.UserProfile[\s\S]{0,120}init\.json)",
+						 "Home init.json Persistence",
+						 "References an init.json file beneath a user home directory, matching GlassWorm persistence reporting.",
+						 Severity.Warning),
+
+						(@"(?:calendar\.google\.com|www\.google\.com/calendar|Google\s+Calendar)",
+						 "Google Calendar C2 Reference",
+						 "References Google Calendar, which has been reported as a GlassWorm command-and-control channel.",
+						 Severity.Warning),
+
+						(@"(?:GetUserDefaultUILanguage|GetSystemDefaultUILanguage|CurrentUICulture|CurrentCulture|navigator\.language|resolvedOptions\s*\(\s*\)\.locale|locale|language)[\s\S]{0,120}(?:ru-RU|ru_RU|['""]ru['""]|Russian|Русск)[\s\S]{0,120}(?:return|exit|process\.exit|Environment\.Exit)",
+						 "Russian Locale Evasion",
+						 "Checks for a Russian locale before aborting execution, matching reported GlassWorm evasion behavior.",
+						 Severity.Warning),
 				};
+
+		private static readonly string[] SuspiciousNeedles =
+		{
+			"codepointat",
+			"0xfe0",
+			"0xe0100",
+			"eval",
+			"buffer.from",
+			"new function",
+			"require(",
+			"lzcdrtfxyqiplpd",
+			"BjVeAjPrSKFiingBn4vZvghsGj9KCE8AJVtbc9S8o8SC",
+			"6YGcuyFRJKZtcaYCCFba9fScNUvPkGXodXE1mJiSzqDJ",
+			"init.json",
+			"calendar.google.com",
+			"google calendar",
+			"ru-ru",
+			"ru_ru",
+			"russian",
+			"русск",
+		};
 
 		// ═════════════════════════════════════════════════════════════════════════
 		// Public API
@@ -284,51 +332,73 @@ namespace ScanCharSecExploit
 		}
 
 		/// <summary>
+		/// Quick text-level pre-check for ASCII/plain-text suspicious content so
+		/// pattern-only threats are not skipped before full analysis.
+		/// </summary>
+		public static bool MayContainSuspiciousText(byte[] data)
+		{
+			if (data.Length == 0)
+				return false;
+
+			var text = Encoding.UTF8.GetString(data);
+			foreach (var needle in SuspiciousNeedles)
+			{
+				if (text.IndexOf(needle, StringComparison.OrdinalIgnoreCase) >= 0)
+					return true;
+			}
+
+			return false;
+		}
+
+		/// <summary>
 		/// Full analysis: detects hidden variation-selector data AND suspicious
 		/// source-code patterns. Returns a complete ScanResult (never null).
 		/// </summary>
-		public static ScanResult Analyze(string text, string filePath)
+		public static ScanResult Analyze(string text, string filePath, bool includeHiddenCharPass = true)
 		{
 			var result = new ScanResult { FilePath = filePath };
 
 			// ── Pass 1: hidden character detection ────────────────────────────
-			var lines = BuildLineIndex(text);
-			var hiddenBytes = new List<byte>();
-
-			for (int i = 0; i < text.Length; i++)
+			if (includeHiddenCharPass)
 			{
-				int cp = SafeConvertToUtf32(text, i, out bool isSurrogate);
-				if (cp < 0) continue; // skip unpaired surrogates
+				var lines = BuildLineIndex(text);
+				var hiddenBytes = new List<byte>();
 
-				CharType ctype = ClassifyCodePoint(cp);
-
-				if (ctype != CharType.Normal)
+				for (int i = 0; i < text.Length; i++)
 				{
-					var (line, col) = GetLineCol(lines, i);
-					result.Occurrences.Add(new HiddenCharOccurrence
-					{
-						Position = i,
-						Line = line,
-						Column = col,
-						CodePoint = cp,
-						Type = ctype,
-						CarrierContext = GetContext(text, i, 10)
-					});
+					int cp = SafeConvertToUtf32(text, i, out bool isSurrogate);
+					if (cp < 0) continue; // skip unpaired surrogates
 
-					int b = VsToByte(cp);
-					if (b >= 0)
-						hiddenBytes.Add((byte)b);
+					CharType ctype = ClassifyCodePoint(cp);
+
+					if (ctype != CharType.Normal)
+					{
+						var (line, col) = GetLineCol(lines, i);
+						result.Occurrences.Add(new HiddenCharOccurrence
+						{
+							Position = i,
+							Line = line,
+							Column = col,
+							CodePoint = cp,
+							Type = ctype,
+							CarrierContext = GetContext(text, i, 10)
+						});
+
+						int b = VsToByte(cp);
+						if (b >= 0)
+							hiddenBytes.Add((byte)b);
+					}
+
+					if (isSurrogate) i++;
 				}
 
-				if (isSurrogate) i++;
-			}
-
-			// ── Decode reconstructed bytes ────────────────────────────────────
-			if (hiddenBytes.Count > 0)
-			{
-				result.HiddenByteCount = hiddenBytes.Count;
-				result.DecodedPreview = Truncate(FormatPreview(hiddenBytes), 160);
-				result.Base64DecodedPreview = TryDecodeBase64(hiddenBytes);
+				// ── Decode reconstructed bytes ────────────────────────────────────
+				if (hiddenBytes.Count > 0)
+				{
+					result.HiddenByteCount = hiddenBytes.Count;
+					result.DecodedPreview = Truncate(FormatPreview(hiddenBytes), 160);
+					result.Base64DecodedPreview = TryDecodeBase64(hiddenBytes);
+				}
 			}
 
 			// ── Pass 2: suspicious-pattern detection ─────────────────────────
